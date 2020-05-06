@@ -27,7 +27,9 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 double setPoint = 0;
 double pitchAngle;
 double output;
-PID pid(&pitchAngle, &output, &setPoint, 30, 100, 0.5, DIRECT);
+//PID pid(&pitchAngle, &output, &setPoint, 45, 200, 1.2, DIRECT);
+//PID pid(&pitchAngle, &output, &setPoint, 45, 300, 1, DIRECT);
+PID pid(&pitchAngle, &output, &setPoint, 45, 350, 1, DIRECT);
 
 void setup() {
   Serial.begin(115200);
@@ -95,7 +97,7 @@ void setup() {
   pid.SetMode(AUTOMATIC);
 
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
+  if (dmpReady) digitalWrite(LED_BUILTIN, HIGH);
 }
 
 void loop() {
