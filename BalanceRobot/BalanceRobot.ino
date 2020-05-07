@@ -24,17 +24,22 @@ Quaternion q;           // [w, x, y, z]         quaternion container
 VectorFloat gravity;    // [x, y, z]            gravity vector
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
-double pitchSetPoint = 0;
+const double PITCH_UPRIGHT = -0.5;
+//const double PITCH_UPRIGHT = 0;
+
+double pitchSetPoint = PITCH_UPRIGHT;
 double pitchReading;
 double pitchOutput;
 //PID pid(&pitchAngle, &output, &setPoint, 45, 200, 1.2, DIRECT);
 //PID pid(&pitchAngle, &output, &setPoint, 45, 300, 1, DIRECT);
-PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 45, 350, 1, DIRECT);
+PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 45, 350, 0.8, DIRECT);
 
 double yawSetPoint = 0;
 double yawReading;
 double yawOutput;
 PID yawPid(&yawReading, &yawOutput, &yawSetPoint, 1, 0, 0, DIRECT);
+
+unsigned long driveTimer = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -75,7 +80,7 @@ void setup() {
     mpu.setDMPEnabled(true);
 
     // set our DMP Ready flag so the main loop() function knows it's okay to use it
-    Serial.println(F("DMP ready! Waiting for first interrupt..."));
+    Serial.println(F("DMP ready!"));
     dmpReady = true;
 
     // get expected DMP packet size for later comparison
@@ -112,6 +117,48 @@ void loop() {
   // if programming failed, don't try to do anything
   if (!dmpReady) return;
 
+  int command = -1;
+  while (Serial.available()) {
+    command = Serial.read(); //reads serial input
+  }
+  if (command == 'l' || command == 'L') {
+    yawSetPoint -= 15;
+    Serial.print("yawSetPoint: ");
+    Serial.println(yawSetPoint);
+  } else if (command == 'r' || command == 'R') {
+    yawSetPoint += 15;
+    Serial.print("yawSetPoint: ");
+    Serial.println(yawSetPoint);
+  } else if (command == 'f' || command == 'F') {
+    pitchSetPoint -= 0.75;
+    driveTimer = millis();
+    Serial.print("pitchSetPoint: ");
+    Serial.println(pitchSetPoint);
+  } else if (command == 'b' || command == 'B') {
+    pitchSetPoint += 0.75;
+    driveTimer = millis();
+    Serial.print("pitchSetPoint: ");
+    Serial.println(pitchSetPoint);
+  }
+
+  unsigned long driveTimeMillis = millis() - driveTimer;
+  if (driveTimer > 0 && driveTimeMillis > 2000) {
+    Serial.print("driveTimer: ");
+    Serial.println(driveTimer);
+    driveTimer = 0;
+    pitchSetPoint = PITCH_UPRIGHT;
+    Serial.print("pitchSetPoint: ");
+    Serial.println(pitchSetPoint);
+  }
+
+  /* TODO handle wrap-around somehow
+  while (yawSetPoint < -180) {
+    yawSetPoint += 360;
+  }
+  while (yawSetPoint > 180) {
+    yawSetPoint -= 360;
+  }*/
+
   //int measurementTime = millis();
   if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) { // Get the Latest packet 
     mpu.resetFIFO();
@@ -127,15 +174,10 @@ void loop() {
     Serial.print(yawReading);
     Serial.print(", pitch:");
     Serial.print(pitchReading);
-    //Serial.print(", roll:");
-    //Serial.print(ypr[2] * 180/M_PI);
+    Serial.println();
 
     pitchPid.Compute();
     yawPid.Compute();
-
-    Serial.print(", yawOutput:");
-    Serial.print(yawOutput);
-    Serial.println();
 
     double speedA = pitchOutput + yawOutput;
     double speedB = pitchOutput - yawOutput;
@@ -143,6 +185,9 @@ void loop() {
       speedA = 0;
       speedB = 0;
     }
+
+    speedA = constrain(speedA, -255, 255);
+    speedB = constrain(speedB, -255, 255);
 
     //control speed, deadzone A:50, B:40
     double pwmA = map(abs(speedA),0,255,54,255);
