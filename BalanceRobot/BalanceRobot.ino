@@ -1,7 +1,5 @@
-#include <PID_v1.h>
 #include <Wire.h>
-#include "I2Cdev.h"
-#include "MPU6050_6Axis_MotionApps20.h"
+#include <PID_v1.h>
 
 const int IN1 = 7;
 const int IN2 = 8;
@@ -10,90 +8,59 @@ const int IN3 = 9;
 const int IN4 = 10;
 const int ENB = 11;
 
-MPU6050 mpu;
+const int GYRO_ADDRESS = 0x68;
+const int ACCELEROMETER_Z_CALIBRATION = 1000;
+const int LOOP_MICROS = 4000;
 
-// MPU control/status vars
-bool dmpReady = false;  // set true if DMP init was successful
-uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
-uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
-uint16_t fifoCount;     // count of all bytes currently in FIFO
-uint8_t fifoBuffer[64]; // FIFO storage buffer
+boolean started = false;
 
-// orientation/motion vars
-Quaternion q;           // [w, x, y, z]         quaternion container
-VectorFloat gravity;    // [x, y, z]            gravity vector
-float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+long gyroXCalibration, gyroYCalibration;
 
-const double PITCH_UPRIGHT = -0.5;
-//const double PITCH_UPRIGHT = 0;
+double pitchBalanceSetPoint = 0;
+double pitchDriveSetPoint = 0;
 
-double pitchSetPoint = PITCH_UPRIGHT;
+double pitchSetPoint = 0;
 double pitchReading;
 double pitchOutput;
 //PID pid(&pitchAngle, &output, &setPoint, 45, 200, 1.2, DIRECT);
 //PID pid(&pitchAngle, &output, &setPoint, 45, 300, 1, DIRECT);
-PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 45, 350, 0.8, DIRECT);
-
+PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 45, 350, 0.5, DIRECT);
+/*
 double yawSetPoint = 0;
 double yawReading;
 double yawOutput;
 PID yawPid(&yawReading, &yawOutput, &yawSetPoint, 1, 0, 0, DIRECT);
-
+*/
 unsigned long driveTimer = 0;
+
+unsigned long loopEndTime = 0;
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Starting serial");
-  while (!Serial) {
-    delay(10); // will pause Zero, Leonardo, etc until serial console opens
-  }
+  Serial.println("Initializing MPU-6050...");
 
-  Serial.println(F("Initializing I2C devices..."));
-  mpu.initialize();
+  // Wake up the MPU-6050
+  Wire.beginTransmission(GYRO_ADDRESS);
+  Wire.write(0x6B); // PWR_MGMT_1 register
+  Wire.write(0x00);
+  Wire.endTransmission();
+  // Set the full scale of the gyro to +/- 250 degrees per second
+  Wire.beginTransmission(GYRO_ADDRESS);
+  Wire.write(0x1B); // GYRO_CONFIG register
+  Wire.write(0x00);                                                         //Set the register bits as 00000000 (250dps full scale)
+  Wire.endTransmission();                                                   //End the transmission with the gyro
+  // Set the full scale of the accelerometer to +/- 4g.
+  Wire.beginTransmission(GYRO_ADDRESS);
+  Wire.write(0x1C); // ACCEL_CONFIG register
+  Wire.write(0x08);
+  Wire.endTransmission();
+  // Enable Digital Low Pass Filter to improve the raw data.
+  Wire.beginTransmission(GYRO_ADDRESS);
+  Wire.write(0x1A); // CONFIG register
+  Wire.write(0x03); // ~43Hz
+  Wire.endTransmission();
 
-  // verify connection
-  Serial.println(F("Testing device connections..."));
-  Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
-
-  // load and configure the DMP
-  Serial.println(F("Initializing DMP..."));
-  devStatus = mpu.dmpInitialize();
-
-  // supply your own gyro offsets here, scaled for min sensitivity
-  //           X Accel  Y Accel  Z Accel   X Gyro   Y Gyro   Z Gyro
-  //OFFSETS    -3276,   -2046,    1929,     137,     -15,       8
-  mpu.setXGyroOffset(137);
-  mpu.setYGyroOffset(-15);
-  mpu.setZGyroOffset(8);
-  mpu.setXAccelOffset(-3276);
-  mpu.setYAccelOffset(-2046);
-  mpu.setZAccelOffset(1929);
-
-  // make sure it worked (returns 0 if so)
-  if (devStatus == 0) {
-    // Calibration Time: generate offsets and calibrate our MPU6050
-    mpu.CalibrateAccel(6);
-    mpu.CalibrateGyro(6);
-    mpu.PrintActiveOffsets();
-    // turn on the DMP, now that it's ready
-    Serial.println(F("Enabling DMP..."));
-    mpu.setDMPEnabled(true);
-
-    // set our DMP Ready flag so the main loop() function knows it's okay to use it
-    Serial.println(F("DMP ready!"));
-    dmpReady = true;
-
-    // get expected DMP packet size for later comparison
-    packetSize = mpu.dmpGetFIFOPacketSize();
-  } else {
-    // ERROR!
-    // 1 = initial memory load failed
-    // 2 = DMP configuration updates failed
-    // (if it's going to break, usually the code will be 1)
-    Serial.print(F("DMP Initialization failed (code "));
-    Serial.print(devStatus);
-    Serial.println(F(")"));
-  }
+  Serial.println("Initializing L298N...");
 
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
@@ -102,26 +69,44 @@ void setup() {
   pinMode(IN4, OUTPUT);
   pinMode(ENB, OUTPUT);
 
-  pitchPid.SetSampleTime(5);
+  pitchPid.SetSampleTime(4);
   pitchPid.SetOutputLimits(-255, 255);
-  pitchPid.SetMode(AUTOMATIC);
-  yawPid.SetSampleTime(5);
+  /*yawPid.SetSampleTime(5);
   yawPid.SetOutputLimits(-10, 10);
-  yawPid.SetMode(AUTOMATIC);
+  yawPid.SetMode(AUTOMATIC);*/
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  if (dmpReady) digitalWrite(LED_BUILTIN, HIGH);
+  Serial.println("Measuring gyro calibration values...");
+  loopEndTime = micros() + LOOP_MICROS;
+  for (int i = 0; i < 500; i++) {
+    if (i % 15 == 0) {
+      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));        //Change the state of the LED every 15 loops to make the LED blink fast
+    }
+    Wire.beginTransmission(GYRO_ADDRESS);
+    Wire.write(0x43); // GYRO_XOUT[15:8]
+    Wire.endTransmission();
+    Wire.requestFrom(GYRO_ADDRESS, 4); // GYRO_XOUT[15:8], GYRO_XOUT[7:0], GYRO_YOUT[15:8], GYRO_YOUT[7:0]
+    gyroXCalibration += Wire.read()<<8 | Wire.read();
+    gyroYCalibration += Wire.read()<<8 | Wire.read();
+    delayMicroseconds(loopEndTime - micros()); // Simulate the main program loop time
+    loopEndTime = micros() + LOOP_MICROS;
+  }
+  // Get the average from the 500 readings
+  gyroXCalibration /= 500;
+  gyroYCalibration /= 500;
+
+  Serial.println("Ready to roll!");
+  digitalWrite(LED_BUILTIN, HIGH);
+  loopEndTime = micros() + LOOP_MICROS;
 }
 
 void loop() {
-  // if programming failed, don't try to do anything
-  if (!dmpReady) return;
-
+  // Remote control
+  // --------------
   int command = -1;
   while (Serial.available()) {
     command = Serial.read(); //reads serial input
   }
-  if (command == 'l' || command == 'L') {
+  /*if (command == 'l' || command == 'L') {
     yawSetPoint -= 15;
     Serial.print("yawSetPoint: ");
     Serial.println(yawSetPoint);
@@ -149,9 +134,9 @@ void loop() {
     pitchSetPoint = PITCH_UPRIGHT;
     Serial.print("pitchSetPoint: ");
     Serial.println(pitchSetPoint);
-  }
+  }*/
 
-  /* TODO handle wrap-around somehow
+  /* TODO handle yaw wrap-around somehow
   while (yawSetPoint < -180) {
     yawSetPoint += 360;
   }
@@ -159,46 +144,113 @@ void loop() {
     yawSetPoint -= 360;
   }*/
 
-  //int measurementTime = millis();
-  if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) { // Get the Latest packet 
-    mpu.resetFIFO();
+  // Angle calculations
+  // ------------------
+  /* http://www.geekmomprojects.com/gyroscopes-and-accelerometers-on-a-chip/
+   * Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
+   * where 
+   *     α = τ/(τ + Δt)   
+   *     (Gyroscope Angle) = (Last Measured Filtered Angle) + ω×Δt
+   *     Δt = sampling rate (4ms)
+   *     τ = time constant greater than timescale of typical accelerometer noise (1s)
+   */
 
-    // display Euler angles in degrees
-    mpu.dmpGetQuaternion(&q, fifoBuffer);
-    mpu.dmpGetGravity(&gravity, &q);
-    mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-    yawReading = ypr[0] * 180/M_PI;
-    pitchReading = ypr[1] * 180/M_PI;
+  // Read z accelerometer value
+  Wire.beginTransmission(GYRO_ADDRESS);
+  Wire.write(0x3F); // ACCEL_ZOUT[15:8]
+  Wire.endTransmission();
+  Wire.requestFrom(GYRO_ADDRESS, 2); // ACCEL_ZOUT[15:8], ACCEL_ZOUT[7:0]
+  long accelerometerZ = Wire.read()<<8 | Wire.read();
+  accelerometerZ += ACCELEROMETER_Z_CALIBRATION;
+  accelerometerZ = constrain(accelerometerZ, -8200, 8200);
 
-    Serial.print("yaw:");
-    Serial.print(yawReading);
-    Serial.print(", pitch:");
+  // Calculate the current pitch angle in degrees according to the accelerometer
+  float pitchAccelerometer = asin((float)accelerometerZ/8200.0)* 57.296;
+
+  // Start balancing when angle is close to zero
+  if(!started && pitchAccelerometer > -0.5&& pitchAccelerometer < 0.5) {
+    pitchReading = pitchAccelerometer;
+    started = true;
+    pitchBalanceSetPoint = 0;
+    pitchDriveSetPoint = 0;
+    pitchPid.SetMode(AUTOMATIC);
+  }
+
+  // Read X and Y gyro values
+  Wire.beginTransmission(GYRO_ADDRESS);
+  Wire.write(0x43); // GYRO_XOUT[15:8]
+  Wire.endTransmission();
+  Wire.requestFrom(GYRO_ADDRESS, 4); // GYRO_XOUT[15:8], GYRO_XOUT[7:0], GYRO_YOUT[15:8], GYRO_YOUT[7:0]
+  long gyroX = Wire.read()<<8 | Wire.read();
+  long gyroY = Wire.read()<<8 | Wire.read();
+  
+  gyroX -= gyroXCalibration;
+  gyroY -= gyroYCalibration;
+
+  // Calculate the angle in degrees traveled during this loop angle
+  // (Gyroscope Angle) = (Last Measured Filtered Angle) + ω×Δt
+  pitchReading += gyroY * 0.000031;                             
+
+  // Complementary filter to combine the gyro and accelerometer angle
+  // Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
+  pitchReading = pitchReading * 0.9996 + pitchAccelerometer * 0.0004;
+
+  // TODO compute accumulated Yaw
+
+  if (started) {
+    pitchSetPoint = pitchBalanceSetPoint + pitchDriveSetPoint;
+
+    //Serial.print("yaw:");
+    //Serial.print(yawReading);
+    Serial.print("setpoint:");
+    Serial.print(pitchSetPoint);
+    Serial.print(", reading:");
     Serial.print(pitchReading);
     Serial.println();
 
     pitchPid.Compute();
-    yawPid.Compute();
+    //yawPid.Compute();
 
-    double speedA = pitchOutput + yawOutput;
-    double speedB = pitchOutput - yawOutput;
+    // The self balancing point is adjusted when the remote control isn't trying to move the robot.
+    // This should stop the robot from wandering.
+    /*if (pitchDriveSetPoint == 0) {
+      // Increase the self balancing setpoint if the robot is still moving forwards
+      if (pitchOutput < -5) {
+        pitchBalanceSetPoint += 0.0015;
+      }
+      // Decrease the self balancing setpoint if the robot is still moving backwards
+      if (pitchOutput > 5) {
+        pitchBalanceSetPoint -= 0.0015;
+      }
+    }*/
+
+    double speedA = pitchOutput;// + yawOutput;
+    double speedB = pitchOutput;// - yawOutput;
     if (pitchReading > 45 || pitchReading < -45) {
       speedA = 0;
       speedB = 0;
+      // reset balancing point
     }
 
     speedA = constrain(speedA, -255, 255);
     speedB = constrain(speedB, -255, 255);
 
-    //control speed, deadzone A:50, B:40
+    // TODO balancing point calculation based on motor speed
+
+    // control speed, deadzone A:50, B:40
     double pwmA = map(abs(speedA),0,255,54,255);
     double pwmB = map(abs(speedB),0,255,40,255);
     analogWrite(ENA, pwmA);
     analogWrite(ENB, pwmB);
     //control direction 
-    digitalWrite(IN1, speedA < 0 ? HIGH : LOW);
-    digitalWrite(IN2, speedA > 0 ? HIGH : LOW);
+    digitalWrite(IN1, speedA < 0 ? LOW : HIGH);
+    digitalWrite(IN2, speedA > 0 ? LOW : HIGH);
     //direction reversed for second motor (wiring)
-    digitalWrite(IN3, speedB < 0 ? LOW : HIGH);
-    digitalWrite(IN4, speedB > 0 ? LOW : HIGH);
+    digitalWrite(IN3, speedB < 0 ? HIGH : LOW);
+    digitalWrite(IN4, speedB > 0 ? HIGH : LOW);
   }
+
+  // The angle calculations are tuned for a loop time of 4 milliseconds
+  delayMicroseconds(loopEndTime - micros()); // Simulate the main program loop time
+  loopEndTime = micros() + LOOP_MICROS;
 }
