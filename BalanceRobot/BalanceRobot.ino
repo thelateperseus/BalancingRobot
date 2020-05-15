@@ -24,7 +24,8 @@ double pitchReading;
 double pitchOutput;
 //PID pid(&pitchAngle, &output, &setPoint, 45, 200, 1.2, DIRECT);
 //PID pid(&pitchAngle, &output, &setPoint, 45, 300, 1, DIRECT);
-PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 45, 350, 0.5, DIRECT);
+//PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 45, 350, 0.5, DIRECT);
+PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 30, 100, 0.5, DIRECT);
 /*
 double yawSetPoint = 0;
 double yawReading;
@@ -211,18 +212,26 @@ void loop() {
     pitchPid.Compute();
     //yawPid.Compute();
 
+    // Deadband to prevent oscillations
+    if (pitchOutput > 0 && pitchOutput < 2) {
+      pitchOutput = 0;
+    }
+    if (pitchOutput < 0 && pitchOutput > -2) {
+      pitchOutput = 0;
+    }
+
     // The self balancing point is adjusted when the remote control isn't trying to move the robot.
     // This should stop the robot from wandering.
-    /*if (pitchDriveSetPoint == 0) {
+    if (pitchDriveSetPoint == 0) {
       // Increase the self balancing setpoint if the robot is still moving forwards
-      if (pitchOutput < -5) {
-        pitchBalanceSetPoint += 0.0015;
-      }
-      // Decrease the self balancing setpoint if the robot is still moving backwards
-      if (pitchOutput > 5) {
+      if (pitchOutput < 0) {
         pitchBalanceSetPoint -= 0.0015;
       }
-    }*/
+      // Decrease the self balancing setpoint if the robot is still moving backwards
+      if (pitchOutput > 0) {
+        pitchBalanceSetPoint += 0.0015;
+      }
+    }
 
     double speedA = pitchOutput;// + yawOutput;
     double speedB = pitchOutput;// - yawOutput;
@@ -235,11 +244,9 @@ void loop() {
     speedA = constrain(speedA, -255, 255);
     speedB = constrain(speedB, -255, 255);
 
-    // TODO balancing point calculation based on motor speed
-
     // control speed, deadzone A:50, B:40
-    double pwmA = map(abs(speedA),0,255,54,255);
-    double pwmB = map(abs(speedB),0,255,40,255);
+    double pwmA = map(abs(speedA),1,255,54,255);
+    double pwmB = map(abs(speedB),1,255,40,255);
     analogWrite(ENA, pwmA);
     analogWrite(ENB, pwmB);
     //control direction 
