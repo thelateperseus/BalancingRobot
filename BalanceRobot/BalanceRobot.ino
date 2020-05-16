@@ -12,27 +12,31 @@ const int GYRO_ADDRESS = 0x68;
 const int ACCELEROMETER_Z_CALIBRATION = 1000;
 const int LOOP_MICROS = 4000;
 
+const double PITCH_BALANCE_SP_STEP = 0.0015;
+const double PITCH_DRIVE_SP_STEP = 0.0005;
+const double DRIVE_SPEED_MIN = 40;
+const double DRIVE_SPEED_MAX = 50;
+
 boolean started = false;
 
-long gyroXCalibration, gyroYCalibration;
+long gyroXCalibration = 0, gyroYCalibration = 0;
 
 double pitchBalanceSetPoint = 0;
 double pitchDriveSetPoint = 0;
 
 double pitchSetPoint = 0;
-double pitchReading;
-double pitchOutput;
-//PID pid(&pitchAngle, &output, &setPoint, 45, 200, 1.2, DIRECT);
-//PID pid(&pitchAngle, &output, &setPoint, 45, 300, 1, DIRECT);
-//PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 45, 350, 0.5, DIRECT);
-PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 30, 100, 0.5, DIRECT);
+double pitchReading = 0;
+double pitchOutput = 0;
+PID pitchPid(&pitchReading, &pitchOutput, &pitchSetPoint, 30, 100, 1, REVERSE);
 /*
 double yawSetPoint = 0;
-double yawReading;
-double yawOutput;
+double yawReading = 0;
+double yawOutput = 0;
 PID yawPid(&yawReading, &yawOutput, &yawSetPoint, 1, 0, 0, DIRECT);
 */
-unsigned long driveTimer = 0;
+
+int activeCommand = -1;
+unsigned long commandTimer = 0;
 
 unsigned long loopEndTime = 0;
 
@@ -115,27 +119,27 @@ void loop() {
     yawSetPoint += 15;
     Serial.print("yawSetPoint: ");
     Serial.println(yawSetPoint);
-  } else if (command == 'f' || command == 'F') {
-    pitchSetPoint -= 0.75;
-    driveTimer = millis();
-    Serial.print("pitchSetPoint: ");
-    Serial.println(pitchSetPoint);
+  } else*/ if (command == 'f' || command == 'F') {
+    activeCommand = command;
+    commandTimer = millis();
+    Serial.print("command: ");
+    Serial.println((char)command);
+    pitchDriveSetPoint += 0.75;
   } else if (command == 'b' || command == 'B') {
-    pitchSetPoint += 0.75;
-    driveTimer = millis();
-    Serial.print("pitchSetPoint: ");
-    Serial.println(pitchSetPoint);
+    activeCommand = command;
+    commandTimer = millis();
+    Serial.print("command: ");
+    Serial.println((char)command);
+    pitchDriveSetPoint -= 0.75;
   }
 
-  unsigned long driveTimeMillis = millis() - driveTimer;
-  if (driveTimer > 0 && driveTimeMillis > 2000) {
-    Serial.print("driveTimer: ");
-    Serial.println(driveTimer);
-    driveTimer = 0;
-    pitchSetPoint = PITCH_UPRIGHT;
-    Serial.print("pitchSetPoint: ");
-    Serial.println(pitchSetPoint);
-  }*/
+  unsigned long commandTimeMillis = millis() - commandTimer;
+  if (commandTimer > 0 && commandTimeMillis > 5000) {
+    activeCommand = -1;
+    commandTimer = 0;
+    pitchDriveSetPoint = 0;
+    Serial.println("cleared command");
+  }
 
   /* TODO handle yaw wrap-around somehow
   while (yawSetPoint < -180) {
@@ -169,7 +173,7 @@ void loop() {
   float pitchAccelerometer = asin((float)accelerometerZ/8200.0)* 57.296;
 
   // Start balancing when angle is close to zero
-  if(!started && pitchAccelerometer > -0.5&& pitchAccelerometer < 0.5) {
+  if(!started && pitchAccelerometer > -0.5 && pitchAccelerometer < 0.5) {
     pitchReading = pitchAccelerometer;
     started = true;
     pitchBalanceSetPoint = 0;
@@ -190,27 +194,35 @@ void loop() {
 
   // Calculate the angle in degrees traveled during this loop angle
   // (Gyroscope Angle) = (Last Measured Filtered Angle) + ω×Δt
-  pitchReading += gyroY * 0.000031;                             
+  float pitchGyro = pitchReading + gyroY * 0.000031;                             
 
   // Complementary filter to combine the gyro and accelerometer angle
   // Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
-  pitchReading = pitchReading * 0.9996 + pitchAccelerometer * 0.0004;
+  pitchReading = pitchGyro * 0.9996 + pitchAccelerometer * 0.0004;
 
   // TODO compute accumulated Yaw
 
   if (started) {
     pitchSetPoint = pitchBalanceSetPoint + pitchDriveSetPoint;
 
-    //Serial.print("yaw:");
-    //Serial.print(yawReading);
-    Serial.print("setpoint:");
-    Serial.print(pitchSetPoint);
-    Serial.print(", reading:");
-    Serial.print(pitchReading);
-    Serial.println();
-
     pitchPid.Compute();
     //yawPid.Compute();
+
+    //Serial.print("yaw:");
+    //Serial.print(yawReading);
+    if (activeCommand != -1) {
+      /*Serial.print("bsp:");
+      Serial.print(pitchBalanceSetPoint);*/
+      Serial.print(", dsp:");
+      Serial.print(pitchDriveSetPoint);
+      /*Serial.print(", sp:");
+      Serial.print(pitchSetPoint);*/
+      Serial.print(", p:");
+      Serial.print(pitchReading);
+      Serial.print(", o:");
+      Serial.print(pitchOutput);
+      Serial.println();
+    }
 
     // Deadband to prevent oscillations
     if (pitchOutput > 0 && pitchOutput < 2) {
@@ -220,25 +232,44 @@ void loop() {
       pitchOutput = 0;
     }
 
-    // The self balancing point is adjusted when the remote control isn't trying to move the robot.
-    // This should stop the robot from wandering.
-    if (pitchDriveSetPoint == 0) {
-      // Increase the self balancing setpoint if the robot is still moving forwards
-      if (pitchOutput < 0) {
-        pitchBalanceSetPoint -= 0.0015;
+    if (activeCommand == 'f' || activeCommand == 'F') {
+      if (commandTimeMillis > 1000) {
+        if (pitchOutput < DRIVE_SPEED_MIN) {
+          pitchDriveSetPoint += PITCH_DRIVE_SP_STEP;
+        }
+        if (pitchOutput > DRIVE_SPEED_MAX) {
+          pitchDriveSetPoint -= PITCH_DRIVE_SP_STEP * 20;
+        }
       }
-      // Decrease the self balancing setpoint if the robot is still moving backwards
+    } else if (activeCommand == 'b' || activeCommand == 'B') {
+      if (commandTimeMillis > 1000) {
+        if (pitchOutput > -DRIVE_SPEED_MIN) {
+          pitchDriveSetPoint -= PITCH_DRIVE_SP_STEP;
+        }
+        if (pitchOutput < -DRIVE_SPEED_MAX) {
+          pitchDriveSetPoint += PITCH_DRIVE_SP_STEP * 20;
+        }
+      }
+    } else if (pitchDriveSetPoint == 0) {
+      // The self balancing point is adjusted when the remote control isn't trying to move the robot.
+      // This should stop the robot from wandering.
+      if (pitchOutput < 0) {
+        pitchBalanceSetPoint += PITCH_BALANCE_SP_STEP;
+      }
       if (pitchOutput > 0) {
-        pitchBalanceSetPoint += 0.0015;
+        pitchBalanceSetPoint -= PITCH_BALANCE_SP_STEP;
       }
     }
+    // Prevent runaway
+    pitchDriveSetPoint = constrain(pitchDriveSetPoint, -1.2, 1.2);
 
     double speedA = pitchOutput;// + yawOutput;
     double speedB = pitchOutput;// - yawOutput;
     if (pitchReading > 45 || pitchReading < -45) {
       speedA = 0;
       speedB = 0;
-      // reset balancing point
+      pitchDriveSetPoint = 0;
+      activeCommand = -1;
     }
 
     speedA = constrain(speedA, -255, 255);
@@ -250,11 +281,11 @@ void loop() {
     analogWrite(ENA, pwmA);
     analogWrite(ENB, pwmB);
     //control direction 
-    digitalWrite(IN1, speedA < 0 ? LOW : HIGH);
-    digitalWrite(IN2, speedA > 0 ? LOW : HIGH);
+    digitalWrite(IN1, speedA < 0 ? HIGH : LOW);
+    digitalWrite(IN2, speedA > 0 ? HIGH : LOW);
     //direction reversed for second motor (wiring)
-    digitalWrite(IN3, speedB < 0 ? HIGH : LOW);
-    digitalWrite(IN4, speedB > 0 ? HIGH : LOW);
+    digitalWrite(IN3, speedB < 0 ? LOW : HIGH);
+    digitalWrite(IN4, speedB > 0 ? LOW : HIGH);
   }
 
   // The angle calculations are tuned for a loop time of 4 milliseconds
