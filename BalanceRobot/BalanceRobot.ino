@@ -31,12 +31,11 @@ double filteredSpeed = 0;
 double speedPidOutput = 0;
 //PID speedPid(&pitchPidOutput, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000005, DIRECT);
 PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000005, DIRECT);
-/*
-  double yawSetPoint = 0;
-  double yawReading = 0;
-  double yawOutput = 0;
-  PID yawPid(&yawReading, &yawOutput, &yawSetPoint, 1, 0, 0, DIRECT);
-*/
+
+double yawSetPoint = 0;
+double yawReading = 0;
+double yawOutput = 0;
+PID yawPid(&yawReading, &yawOutput, &yawSetPoint, 1, 0, 0, DIRECT);
 
 int activeCommand = -1;
 unsigned long commandTimer = 0;
@@ -106,9 +105,8 @@ void setup() {
   pitchPid.SetOutputLimits(-255, 255);
   speedPid.SetSampleTime(4);
   speedPid.SetOutputLimits(-15, 15);
-  /*yawPid.SetSampleTime(5);
-    yawPid.SetOutputLimits(-10, 10);
-    yawPid.SetMode(AUTOMATIC);*/
+  yawPid.SetSampleTime(4);
+  yawPid.SetOutputLimits(-10, 10);
 
   Serial.println("Measuring gyro calibration values...");
   loopEndTime = micros() + LOOP_MICROS;
@@ -141,15 +139,15 @@ void loop() {
   while (Serial.available()) {
     command = Serial.read(); //reads serial input
   }
-  /*if (command == 'l' || command == 'L') {
+  if (command == 'l' || command == 'L') {
     yawSetPoint -= 15;
     Serial.print("yawSetPoint: ");
     Serial.println(yawSetPoint);
-    } else if (command == 'r' || command == 'R') {
+  } else if (command == 'r' || command == 'R') {
     yawSetPoint += 15;
     Serial.print("yawSetPoint: ");
     Serial.println(yawSetPoint);
-    } else*/ if (command == 'f' || command == 'F') {
+  } else if (command == 'f' || command == 'F') {
     activeCommand = command;
     commandTimer = millis();
     Serial.print("command: ");
@@ -170,14 +168,6 @@ void loop() {
     speedSetPoint = 0;
     Serial.println("cleared command");
   }
-
-  /* TODO handle yaw wrap-around somehow
-    while (yawSetPoint < -180) {
-    yawSetPoint += 360;
-    }
-    while (yawSetPoint > 180) {
-    yawSetPoint -= 360;
-    }*/
 
   // Angle calculations
   // ------------------
@@ -208,6 +198,7 @@ void loop() {
     started = true;
     pitchPid.SetMode(AUTOMATIC);
     speedPid.SetMode(AUTOMATIC);
+    yawPid.SetMode(AUTOMATIC);
   }
 
   // Read X and Y gyro values
@@ -229,7 +220,7 @@ void loop() {
   // Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
   pitchReading = pitchGyro * 0.9996 + pitchAccelerometer * 0.0004;
 
-  // TODO compute accumulated Yaw
+  yawReading -= gyroX * 0.000031;
 
   if (started) {
     pitchSetPoint += speedPidOutput;
@@ -238,7 +229,7 @@ void loop() {
     filteredSpeed = speedFilter.step(pitchPidOutput);
     speedPid.Compute();
 
-    //yawPid.Compute();
+    yawPid.Compute();
 
     //Serial.print("yaw:");
     //Serial.print(yawReading);
@@ -265,8 +256,8 @@ void loop() {
       }
     */
 
-    double speedA = pitchPidOutput;// + yawOutput;
-    double speedB = pitchPidOutput;// - yawOutput;
+    double speedA = pitchPidOutput + yawOutput;
+    double speedB = pitchPidOutput - yawOutput;
     if (pitchReading > 45 || pitchReading < -45) {
       speedA = 0;
       speedB = 0;
