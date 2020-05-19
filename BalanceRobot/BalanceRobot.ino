@@ -27,9 +27,10 @@ double pitchPidOutput = 0;
 PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, 30, 100, 1, REVERSE);
 
 double speedSetPoint = 0;
+double filteredSpeed = 0;
 double speedPidOutput = 0;
 //PID speedPid(&pitchPidOutput, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000005, DIRECT);
-PID speedPid(&pitchPidOutput, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000002, DIRECT);
+PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000005, DIRECT);
 /*
   double yawSetPoint = 0;
   double yawReading = 0;
@@ -41,6 +42,31 @@ int activeCommand = -1;
 unsigned long commandTimer = 0;
 
 unsigned long loopEndTime = 0;
+
+//Low pass butterworth filter order=1 alpha1=0.04
+//http://www.schwietering.com/jayduino/filtuino/index.php?characteristic=bu&passmode=lp&order=1&usesr=usesr&sr=250&frequencyLow=10&noteLow=&noteHigh=&pw=pw&calctype=double&run=Send
+class  LowPassFilter
+{
+  public:
+    LowPassFilter() {
+      v[0] = 0.0;
+    }
+  private:
+    double v[2];
+  public:
+    double step(double x) { //class II
+      v[0] = v[1];
+      // 20Hz
+      //v[1] = (2.043008243002644164e-1 * x)
+      //   + (0.59139835139947116716 * v[0]);
+      // 10Hz
+      v[1] = (1.121602444751934047e-1 * x)
+             + (0.77567951104961319064 * v[0]);
+      return v[0] + v[1];
+    }
+};
+
+LowPassFilter speedFilter = LowPassFilter();
 
 void setup() {
   Serial.begin(115200);
@@ -207,22 +233,26 @@ void loop() {
 
   if (started) {
     pitchSetPoint += speedPidOutput;
-
     pitchPid.Compute();
+
+    filteredSpeed = speedFilter.step(pitchPidOutput);
     speedPid.Compute();
+
     //yawPid.Compute();
 
     //Serial.print("yaw:");
     //Serial.print(yawReading);
 
-    Serial.print("psp:");
-    Serial.print(pitchSetPoint);
-    Serial.print(", p:");
-    Serial.print(pitchReading);
+    //Serial.print("psp:");
+    //Serial.print(pitchSetPoint);
+    //Serial.print(", p:");
+    //Serial.print(pitchReading);
     Serial.print(", ssp:");
     Serial.print(speedSetPoint);
     Serial.print(", s:");
     Serial.print(pitchPidOutput);
+    Serial.print(", fs:");
+    Serial.print(filteredSpeed);
     Serial.println();
 
     /*
