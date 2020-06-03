@@ -1,5 +1,6 @@
 #include <Wire.h>
 #include <PID_v1.h>
+#include <SoftwareSerial.h>
 
 const int IN1 = 7;
 const int IN2 = 8;
@@ -42,6 +43,8 @@ unsigned long commandTimer = 0;
 
 unsigned long loopEndTime = 0;
 
+SoftwareSerial BTSerial(2, 3); // RX | TX
+
 //Low pass butterworth filter order=1 alpha1=0.04
 //http://www.schwietering.com/jayduino/filtuino/index.php?characteristic=bu&passmode=lp&order=1&usesr=usesr&sr=250&frequencyLow=10&noteLow=&noteHigh=&pw=pw&calctype=double&run=Send
 class  LowPassFilter
@@ -69,6 +72,7 @@ LowPassFilter speedFilter = LowPassFilter();
 
 void setup() {
   Serial.begin(115200);
+  BTSerial.begin(9600);  
   Serial.println("Initializing MPU-6050...");
 
   // Wake up the MPU-6050
@@ -138,6 +142,9 @@ void loop() {
   int command = -1;
   while (Serial.available()) {
     command = Serial.read(); //reads serial input
+  }
+  while (BTSerial.available()) {
+    command = BTSerial.read(); //reads bluetooth input
   }
   if (command == 'l' || command == 'L') {
     yawSetPoint -= 15;
