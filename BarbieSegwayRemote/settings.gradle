@@ -1,0 +1,2 @@
+rootProject.name='Barbie Segway Remote'
+include ':app'

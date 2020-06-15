@@ -31,12 +31,12 @@ double speedSetPoint = 0;
 double filteredSpeed = 0;
 double speedPidOutput = 0;
 //PID speedPid(&pitchPidOutput, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000005, DIRECT);
-PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000005, DIRECT);
+PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.00001, DIRECT);
 
 double yawSetPoint = 0;
 double yawReading = 0;
 double yawOutput = 0;
-PID yawPid(&yawReading, &yawOutput, &yawSetPoint, 1, 0, 0, DIRECT);
+PID yawPid(&yawReading, &yawOutput, &yawSetPoint, 1.5, 0, 0, DIRECT);
 
 int activeCommand = -1;
 unsigned long commandTimer = 0;
@@ -72,7 +72,7 @@ LowPassFilter speedFilter = LowPassFilter();
 
 void setup() {
   Serial.begin(115200);
-  BTSerial.begin(9600);  
+  BTSerial.begin(38400);
   Serial.println("Initializing MPU-6050...");
 
   // Wake up the MPU-6050
@@ -110,7 +110,7 @@ void setup() {
   speedPid.SetSampleTime(4);
   speedPid.SetOutputLimits(-15, 15);
   yawPid.SetSampleTime(4);
-  yawPid.SetOutputLimits(-10, 10);
+  yawPid.SetOutputLimits(-15, 15);
 
   Serial.println("Measuring gyro calibration values...");
   loopEndTime = micros() + LOOP_MICROS;
@@ -130,6 +130,13 @@ void setup() {
   // Get the average from the 500 readings
   gyroXCalibration /= 500;
   gyroYCalibration /= 500;
+
+  Serial.print("Gyro calibration complete. x: ");
+  Serial.print(gyroXCalibration);
+  Serial.print(", y: ");
+  Serial.println(gyroYCalibration);
+
+  // x: -552, y: 66
 
   Serial.println("Ready to roll!");
   digitalWrite(LED_BUILTIN, HIGH);
@@ -159,13 +166,13 @@ void loop() {
     commandTimer = millis();
     Serial.print("command: ");
     Serial.println((char)command);
-    speedSetPoint = 40;
+    speedSetPoint = 35;
   } else if (command == 'b' || command == 'B') {
     activeCommand = command;
     commandTimer = millis();
     Serial.print("command: ");
     Serial.println((char)command);
-    speedSetPoint = -40;
+    speedSetPoint = -35;
   }
 
   unsigned long commandTimeMillis = millis() - commandTimer;
