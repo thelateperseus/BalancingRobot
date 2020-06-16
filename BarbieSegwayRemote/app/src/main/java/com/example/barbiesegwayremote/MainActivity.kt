@@ -69,4 +69,16 @@ class MainActivity : AppCompatActivity() {
     fun forward(view: View) {
         outputStream?.write('F'.toInt());
     }
+
+    fun backward(view: View) {
+        outputStream?.write('B'.toInt());
+    }
+
+    fun left(view: View) {
+        outputStream?.write('L'.toInt());
+    }
+
+    fun right(view: View) {
+        outputStream?.write('R'.toInt());
+    }
 }
