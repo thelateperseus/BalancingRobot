@@ -154,11 +154,11 @@ void loop() {
     command = BTSerial.read(); //reads bluetooth input
   }
   if (command == 'l' || command == 'L') {
-    yawSetPoint -= 15;
+    yawSetPoint -= 1;
     Serial.print("yawSetPoint: ");
     Serial.println(yawSetPoint);
   } else if (command == 'r' || command == 'R') {
-    yawSetPoint += 15;
+    yawSetPoint += 1;
     Serial.print("yawSetPoint: ");
     Serial.println(yawSetPoint);
   } else if (command == 'f' || command == 'F') {
@@ -176,7 +176,7 @@ void loop() {
   }
 
   unsigned long commandTimeMillis = millis() - commandTimer;
-  if (commandTimer > 0 && commandTimeMillis > 5000) {
+  if (commandTimer > 0 && commandTimeMillis > 125) {
     activeCommand = -1;
     commandTimer = 0;
     speedSetPoint = 0;

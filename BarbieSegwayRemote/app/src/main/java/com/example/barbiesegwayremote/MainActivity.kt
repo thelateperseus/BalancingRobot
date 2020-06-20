@@ -5,9 +5,13 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.util.Log
 import android.view.View
+import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import kotlinx.android.synthetic.main.activity_main.*
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -15,9 +19,15 @@ import java.util.*
 
 
 class MainActivity : AppCompatActivity() {
+    private val TAG = "MainActivity"
+
     private var socket: BluetoothSocket? = null
     private var outputStream: OutputStream? = null
     private var inputStream: InputStream? = null
+
+    private val handler = Handler()
+    private var runnable: Runnable? = null
+    private val delay = 100
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,7 +36,39 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
         startBluetooth()
+
+        handler.postDelayed(Runnable {
+            handler.postDelayed(runnable, delay.toLong())
+            sendCommand()
+        }.also { runnable = it }, delay.toLong())
+    }
+
+    override fun onPause() {
+        super.onPause()
+        handler.removeCallbacks(runnable)
+    }
+
+    private fun sendCommand() {
+        when {
+            forward_button.isPressed -> {
+                Log.v(TAG, "forward_button")
+                outputStream?.write('F'.toInt());
+            }
+            backward_button.isPressed -> {
+                Log.v(TAG, "backward_button")
+                outputStream?.write('B'.toInt());
+            }
+            left_button.isPressed -> {
+                Log.v(TAG, "left_button")
+                outputStream?.write('L'.toInt());
+            }
+            right_button.isPressed -> {
+                Log.v(TAG, "right_button")
+                outputStream?.write('R'.toInt());
+            }
+        }
     }
 
     private fun toast(text: String) {
@@ -45,11 +87,10 @@ class MainActivity : AppCompatActivity() {
         }
         val pairedDevices: Set<BluetoothDevice> = bluetoothAdapter.bondedDevices
         val device = pairedDevices.find { d -> d.name == "BarbieSegway" }
+        //val device = pairedDevices.find { d -> d.name == "RemoteReceiver" }
         if (device == null) {
             toast("BarbieSegway NOT Found")
         } else {
-            toast("BarbieSegway Found")
-
             // Standard SerialPortService ID
             val uuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
             val socket1 = device.createRfcommSocketToServiceRecord(uuid)
@@ -67,18 +108,18 @@ class MainActivity : AppCompatActivity() {
 
     /** Called when the user taps the Forward button */
     fun forward(view: View) {
-        outputStream?.write('F'.toInt());
+        //outputStream?.write('F'.toInt());
     }
 
     fun backward(view: View) {
-        outputStream?.write('B'.toInt());
+        //outputStream?.write('B'.toInt());
     }
 
     fun left(view: View) {
-        outputStream?.write('L'.toInt());
+        //outputStream?.write('L'.toInt());
     }
 
     fun right(view: View) {
-        outputStream?.write('R'.toInt());
+        //outputStream?.write('R'.toInt());
     }
 }
