@@ -17,7 +17,7 @@ boolean started = false;
 
 long gyroXCalibration = 0, gyroYCalibration = 0;
 
-double pitchSetPoint = 1; // imperfect placement of MPU6050
+double pitchSetPoint = 0;
 double pitchReading = 0;
 double pitchPidOutput = 0;
 PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, 40, 140, 1, REVERSE);
@@ -26,7 +26,7 @@ double speedSetPoint = 0;
 double filteredSpeed = 0;
 double speedPidOutput = 0;
 //PID speedPid(&pitchPidOutput, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000005, DIRECT);
-PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00015, 0, 0.00001, DIRECT);
+PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00000004, 0.0375, 0, DIRECT);
 
 double yawSetPoint = 0;
 double yawReading = 0;
@@ -149,24 +149,16 @@ void loop() {
     command = BTSerial.read(); //reads bluetooth input
   }
   if (command == 'l' || command == 'L') {
-    yawSetPoint -= 1;
-    Serial.print("yawSetPoint: ");
-    Serial.println(yawSetPoint);
+    yawSetPoint -= 2;
   } else if (command == 'r' || command == 'R') {
-    yawSetPoint += 1;
-    Serial.print("yawSetPoint: ");
-    Serial.println(yawSetPoint);
+    yawSetPoint += 2;
   } else if (command == 'f' || command == 'F') {
     activeCommand = command;
     commandTimer = millis();
-    Serial.print("command: ");
-    Serial.println((char)command);
     speedSetPoint = 35;
   } else if (command == 'b' || command == 'B') {
     activeCommand = command;
     commandTimer = millis();
-    Serial.print("command: ");
-    Serial.println((char)command);
     speedSetPoint = -35;
   }
 
@@ -175,7 +167,6 @@ void loop() {
     activeCommand = -1;
     commandTimer = 0;
     speedSetPoint = 0;
-    Serial.println("cleared command");
   }
 
   // Angle calculations
@@ -232,7 +223,7 @@ void loop() {
   yawReading -= gyroX * 0.000031;
 
   if (started) {
-    pitchSetPoint += speedPidOutput;
+    pitchSetPoint = speedPidOutput + 1; // imperfect placement of MPU6050
     pitchPid.Compute();
 
     filteredSpeed = speedFilter.step(pitchPidOutput);
@@ -243,10 +234,10 @@ void loop() {
     //Serial.print("yaw:");
     //Serial.print(yawReading);
 
-    //Serial.print("psp:");
-    //Serial.print(pitchSetPoint);
-    //Serial.print(", p:");
-    //Serial.print(pitchReading);
+    /*Serial.print("psp:");
+    Serial.print(pitchSetPoint);
+    Serial.print(", p:");
+    Serial.print(pitchReading);*/
     Serial.print(", ssp:");
     Serial.print(speedSetPoint);
     Serial.print(", s:");
