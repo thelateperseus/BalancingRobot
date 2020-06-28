@@ -13,11 +13,6 @@ const int GYRO_ADDRESS = 0x68;
 const int ACCELEROMETER_Z_CALIBRATION = 1000;
 const int LOOP_MICROS = 4000;
 
-const double PITCH_BALANCE_SP_STEP = 0.0015;
-const double PITCH_DRIVE_SP_STEP = 0.0005;
-const double DRIVE_SPEED_MIN = 40;
-const double DRIVE_SPEED_MAX = 50;
-
 boolean started = false;
 
 long gyroXCalibration = 0, gyroYCalibration = 0;
@@ -25,13 +20,13 @@ long gyroXCalibration = 0, gyroYCalibration = 0;
 double pitchSetPoint = 0;
 double pitchReading = 0;
 double pitchPidOutput = 0;
-PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, 30, 100, 1, REVERSE);
+PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, 40, 140, 1, REVERSE);
 
 double speedSetPoint = 0;
 double filteredSpeed = 0;
 double speedPidOutput = 0;
 //PID speedPid(&pitchPidOutput, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000005, DIRECT);
-PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.00001, DIRECT);
+PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00015, 0, 0.00001, DIRECT);
 
 double yawSetPoint = 0;
 double yawReading = 0;
