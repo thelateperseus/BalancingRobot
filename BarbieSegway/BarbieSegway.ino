@@ -17,7 +17,7 @@ boolean started = false;
 
 long gyroXCalibration = 0, gyroYCalibration = 0;
 
-double pitchSetPoint = 0;
+double pitchSetPoint = 1; // imperfect placement of MPU6050
 double pitchReading = 0;
 double pitchPidOutput = 0;
 PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, 40, 140, 1, REVERSE);
@@ -126,10 +126,10 @@ void setup() {
   gyroXCalibration /= 500;
   gyroYCalibration /= 500;
 
-  Serial.print("Gyro calibration complete. x: ");
+  /*Serial.print("Gyro calibration complete. x: ");
   Serial.print(gyroXCalibration);
   Serial.print(", y: ");
-  Serial.println(gyroYCalibration);
+  Serial.println(gyroYCalibration);*/
 
   // x: -552, y: 66
 
@@ -270,9 +270,12 @@ void loop() {
     if (pitchReading > 45 || pitchReading < -45) {
       speedA = 0;
       speedB = 0;
+      pitchReading = 0;
+      yawReading = 0;
       pitchSetPoint = 0;
       speedSetPoint = 0;
       activeCommand = -1;
+      started = false;
     }
 
     speedA = constrain(speedA, -255, 255);
