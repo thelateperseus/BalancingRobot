@@ -163,7 +163,7 @@ void loop() {
   }
 
   unsigned long commandTimeMillis = millis() - commandTimer;
-  if (commandTimer > 0 && commandTimeMillis > 125) {
+  if (commandTimer > 0 && commandTimeMillis > 150) {
     activeCommand = -1;
     commandTimer = 0;
     speedSetPoint = 0;
