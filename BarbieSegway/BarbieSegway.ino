@@ -10,7 +10,7 @@ const int IN4 = 10;
 const int ENB = 11;
 
 const int GYRO_ADDRESS = 0x68;
-const int ACCELEROMETER_Z_CALIBRATION = 1000;
+const int ACCELEROMETER_Z_CALIBRATION = 300;
 const int LOOP_MICROS = 4000;
 
 boolean started = false;
@@ -26,7 +26,7 @@ double speedSetPoint = 0;
 double filteredSpeed = 0;
 double speedPidOutput = 0;
 //PID speedPid(&pitchPidOutput, &speedPidOutput, &speedSetPoint, 0.00025, 0, 0.000005, DIRECT);
-PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00000004, 0.0375, 0, DIRECT);
+PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, 0.00000008, 0.02 , 0, DIRECT);
 
 double yawSetPoint = 0;
 double yawReading = 0;
@@ -127,9 +127,9 @@ void setup() {
   gyroYCalibration /= 500;
 
   /*Serial.print("Gyro calibration complete. x: ");
-  Serial.print(gyroXCalibration);
-  Serial.print(", y: ");
-  Serial.println(gyroYCalibration);*/
+    Serial.print(gyroXCalibration);
+    Serial.print(", y: ");
+    Serial.println(gyroYCalibration);*/
 
   // x: -552, y: 66
 
@@ -155,11 +155,11 @@ void loop() {
   } else if (command == 'f' || command == 'F') {
     activeCommand = command;
     commandTimer = millis();
-    speedSetPoint = 35;
+    speedSetPoint = 30;
   } else if (command == 'b' || command == 'B') {
     activeCommand = command;
     commandTimer = millis();
-    speedSetPoint = -35;
+    speedSetPoint = -30;
   }
 
   unsigned long commandTimeMillis = millis() - commandTimer;
@@ -226,7 +226,8 @@ void loop() {
     pitchSetPoint = speedPidOutput + 1; // imperfect placement of MPU6050
     pitchPid.Compute();
 
-    filteredSpeed = speedFilter.step(pitchPidOutput);
+    //filteredSpeed = speedFilter.step(pitchPidOutput);
+    filteredSpeed = pitchPidOutput;
     speedPid.Compute();
 
     yawPid.Compute();
@@ -235,9 +236,9 @@ void loop() {
     //Serial.print(yawReading);
 
     /*Serial.print("psp:");
-    Serial.print(pitchSetPoint);
-    Serial.print(", p:");
-    Serial.print(pitchReading);*/
+      Serial.print(pitchSetPoint);
+      Serial.print(", p:");
+      Serial.print(pitchReading);*/
     Serial.print(", ssp:");
     Serial.print(speedSetPoint);
     Serial.print(", s:");
@@ -258,15 +259,23 @@ void loop() {
 
     double speedA = pitchPidOutput + yawOutput;
     double speedB = pitchPidOutput - yawOutput;
-    if (pitchReading > 45 || pitchReading < -45) {
+    if (pitchReading > 45 || pitchReading < -45 || pitchAccelerometer > 45 || pitchAccelerometer < -45) {
       speedA = 0;
       speedB = 0;
       pitchReading = 0;
       yawReading = 0;
       pitchSetPoint = 0;
       speedSetPoint = 0;
+      yawSetPoint = 0;
+      pitchPidOutput = 0;
+      filteredSpeed = 0;
+      speedPidOutput = 0;
+      yawOutput = 0;
       activeCommand = -1;
       started = false;
+      pitchPid.SetMode(MANUAL);
+      speedPid.SetMode(MANUAL);
+      yawPid.SetMode(MANUAL);
     }
 
     speedA = constrain(speedA, -255, 255);

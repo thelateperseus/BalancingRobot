@@ -26,20 +26,20 @@ void loop() {
   int yValue = analogRead(JOYSTICK_Y_PIN);
 
   if (yValue < 256) {
-    BTSerial.write("F");
-    Serial.println("F");
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-  } else if (yValue > 768) {
-    BTSerial.write("B");
-    Serial.println("B");
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-  } else if (xValue < 256) {
     BTSerial.write("L");
     Serial.println("L");
     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-  } else if (xValue > 768) {
+  } else if (yValue > 768) {
     BTSerial.write("R");
     Serial.println("R");
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+  } else if (xValue < 256) {
+    BTSerial.write("B");
+    Serial.println("B");
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+  } else if (xValue > 768) {
+    BTSerial.write("F");
+    Serial.println("F");
     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
   }
   /*
